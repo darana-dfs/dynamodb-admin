@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang='en' data-theme="<%= theme %>">
+<head>
+  <%- include('partials/head') %>
+  <%- include('partials/bootstrap-deps') %>
+  <script src='/assets/vendor/json-formatter/json-formatter.js'></script>
+  <style>
+    .table-container {
+      margin-bottom: 1rem;
+      position: relative;
+    }
+
+    .scroll-indicator {
+      height: 100%;
+      position: absolute;
+      width: 100%;
+    }
+
+    .scroll-indicator::before {
+      background-image: linear-gradient(to right, rgba(146, 146, 146, 0.5), #fff);
+      content: '';
+      height: 100%;
+      left: 0;
+      position: absolute;
+      width: 5px;
+    }
+
+    .scroll-indicator::after {
+      background-image: linear-gradient(to left, rgba(146, 146, 146, 0.5), #fff);
+      content: '';
+      height: 100%;
+      position: absolute;
+      right: 0;
+      width: 5px;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+      position: relative;
+    }
+
+    .items-table {
+      margin-bottom: 0;
+      /* Need to reset max-width set by bootstrap to avoid
+         problems with scroll indicator mask in Safari. */
+      max-width: none;
+      position: relative;
+    }
+
+    /* mask for scroll indicators */
+    .items-table::before {
+      content: '';
+      height: 100%;
+      left: 0;
+      pointer-events: none;
+      position: absolute;
+      top: 0;
+      width: 100%;
+    }
+
+    .items-table th:first-child,
+    .items-table td:first-child {
+      position: sticky;
+      left: 0;
+    }
+
+    .items-table td:first-child {
+      background-color: white;
+    }
+  </style>
+  <%- include('partials/head-tail') %>
+</head>
+<body class="container-fluid">
+  <header>
+    <%
+      const breadcrumb = [
+        {
+          href: '/',
+          text: 'Test Registries',
+        }
+      ]
+    %>
+    <%- include('partials/breadcrumb', { breadcrumb }) %>
+
+    <ul class="nav nav-tabs">
+      <li class="nav-item">
+        <a class="nav-link active item-count" href="/test-registries">
+          Items
+        </a>
+      </li>
+    </ul>
+  </header>
+
+  <main>
+    <script>
+    /* global JSONFormatter, $ */
+    const JSONRender = value => new JSONFormatter.default(value).render()
+
+    const form = document.querySelector('#form')
+    form.addEventListener('submit', () => {
+      const filters = {}
+
+      document.querySelectorAll('#filters-table tr').forEach((filterRow) => {
+        const keyField = filterRow.querySelector('.filter-row-key')
+        const typeField = filterRow.querySelector('.filter-row-type')
+        const operatorField = filterRow.querySelector('.filter-row-operator')
+        const valueField = filterRow.querySelector('.filter-row-value')
+
+        if (keyField.value && valueField.value) {
+          filters[keyField.value] = {
+            operator: operatorField.value,
+            value: valueField.value,
+            type: typeField.value,
+          }
+        }
+      })
+
+      form.filters.value = JSON.stringify(filters)
+    })
+
+    document.querySelector('select[name="queryableSelection"]').addEventListener('change', (event) => {
+      const operationType = document.querySelector('select[name="operationType"]')
+
+      if (operationType.value === 'query') {
+        unrequireAllFilters()
+        requireIndexFilters()
+      }
+    })
+
+    document.querySelector('select[name="operationType"]').addEventListener('change', (event) => {
+      if (event.target.value === 'query') {
+        requireIndexFilters()
+      } else {
+        unrequireAllFilters()
+      }
+    })
+
+    document.querySelector('#add-filter').addEventListener('click', (event) => {
+      event.preventDefault()
+      addFilter()
+    })
+
+    function requireIndexFilters () {
+      const querySelection = document.querySelector('select[name="queryableSelection"]')
+      const option = querySelection.selectedOptions[0]
+      const hashKey = option.getAttribute('data-key-hash')
+      const rangeKey = option.getAttribute('data-key-range')
+
+      if (hashKey) {
+        addHashKeyFilter(hashKey)
+      }
+
+      if (rangeKey) {
+        addRangeKeyFilter(rangeKey)
+      }
+    }
+
+    function unrequireAllFilters () {
+      document.querySelectorAll('#filters-table tr').forEach((filterRow) => {
+        const keyField = filterRow.querySelector('.filter-row-key')
+        keyField.removeAttribute('required')
+        keyField.removeAttribute('readonly')
+        filterRow.querySelector('.filter-row-value').removeAttribute('required')
+        filterRow.querySelector('.filter-remove').removeAttribute('hidden')
+        const operatorField = filterRow.querySelector('.filter-row-operator')
+        operatorField.removeAttribute('disabled')
+        operatorField.querySelectorAll('option').forEach((option) => {
+          option.removeAttribute('disabled')
+        })
+      })
+    }
+
+    function addFilter (key, values, required, availableOperators) {
+      let filterRow
+      let lastRow
+      if (key) {
+        document.querySelectorAll('#filters-table tr').forEach((row) => {
+          if (row.querySelector('.filter-row-key').value === key) {
+            filterRow = row
+          }
+        })
+      }
+
+      if (!filterRow) {
+        lastRow = document.querySelector('#filters-table tr:last-child')
+        filterRow = lastRow.cloneNode(true)
+        filterRow.querySelector('.filter-row-value').value = values && values.value ? values.value : ''
+      }
+
+      const keyField = filterRow.querySelector('.filter-row-key')
+      keyField.value = key || ''
+
+      if (required) {
+        keyField.setAttribute('required', true)
+        keyField.setAttribute('readonly', true)
+        filterRow.querySelector('.filter-row-value').setAttribute('required', true)
+        filterRow.querySelector('.filter-remove').setAttribute('hidden', true)
+      } else {
+        keyField.removeAttribute('required')
+        keyField.removeAttribute('readonly')
+        filterRow.querySelector('.filter-row-value').removeAttribute('required')
+        filterRow.querySelector('.filter-remove').removeAttribute('hidden')
+      }
+
+      if (values && values.type) {
+        const typeField = filterRow.querySelector('.filter-row-type')
+        typeField.value = values.type
+      }
+
+      const operatorField = filterRow.querySelector('.filter-row-operator')
+
+      if (values && values.operator) {
+        operatorField.value = values.operator
+      }
+
+      operatorField.querySelectorAll('option').forEach((option) => {
+        const enabled = availableOperators ? availableOperators.includes(option.value) : true
+        if (enabled) {
+          option.removeAttribute('disabled')
+        } else {
+          option.setAttribute('disabled', true)
+        }
+      })
+
+      if (availableOperators && !availableOperators.includes(operatorField.value)) {
+        operatorField.value = availableOperators[0]
+      }
+
+      if (availableOperators && availableOperators.length === 1) {
+        operatorField.setAttribute('disabled', true)
+      } else {
+        operatorField.removeAttribute('disabled')
+      }
+
+      if (lastRow) {
+        document.querySelector('#filters-table tbody').appendChild(filterRow)
+      }
+    }
+
+    function addHashKeyFilter (hashKey, values) {
+      addFilter(hashKey, values, true, ['='])
+    }
+
+    function addRangeKeyFilter (rangeKey, values) {
+      addFilter(rangeKey, values, false, ['=', '<', '<=', '>', '>=', 'BETWEEN', 'begins_with'])
+    }
+
+    function removeFilter (node) {
+      // prevent removal of the last filter row, instead, just clear it out
+      if (document.querySelectorAll('#filters-table tr').length === 1) {
+        const filterRow = document.querySelector('#filters-table tr')
+        filterRow.querySelector('.filter-row-key').value = ''
+        filterRow.querySelector('.filter-row-value').value = ''
+      } else {
+        node.closest('tr').remove()
+      }
+    }
+
+    function updateFilterAutocomplete(uniqueKeys) {
+      const listContainer = $('#attributes')
+      listContainer.empty()
+      listContainer.append(uniqueKeys.map(key => $(`<option value="${key}"></option>`)))
+    }
+
+    function renderItems(data) {
+      $('#actions-row').append(data.uniqueKeys.map(key => '<th scope="col">' + key + '</th>'))
+
+      if (data.Items.length) {
+        $('#items-container').append(data.Items.map(item => {
+          const viewUrl = '/tables';
+          const rowEl = $('<tr><td><a href="' + viewUrl + '">View</a></td></tr>')
+
+          for (const column of data.uniqueKeys) {
+            const columnEl = $('<td></td>')
+
+            const value = item[column]
+            let wrapperEl = null
+
+            if (Number.isInteger(value) && value >= 0) {
+              let dateValue
+              try {
+                dateValue = new Date(value).toISOString()
+              } catch (error) {
+                dateValue = error.message
+              }
+
+              wrapperEl = $('<abbr data-toggle="tooltip" data-placement="top" title="' + dateValue + '"></abbr>')
+            } else {
+              wrapperEl = $('<div class="preformatted"></div>')
+            }
+
+            rowEl.append(columnEl.append(wrapperEl.append(JSONRender(value))))
+          }
+
+          return rowEl
+        }))
+
+        $('select[name="pageSize"]').on('change', (e) => {
+          const search = new URLSearchParams(location.search);
+          search.set('pageSize', e.target.value);
+          location.search = search.toString();
+        })
+
+        const pageSize = $('select[name="pageSize"]').val();
+
+        if (data.pageNum > 1) {
+          $('.page-link-previous')
+            .attr('href', '?startKey=' + data.prevKey + '&pageNum=' + (data.pageNum-1) + '&filters=' + data.filterQueryString + '&pageSize=' + pageSize)
+          $('.page-item-previous').removeClass('disabled')
+        }
+
+        if (data.nextKey) {
+          $('.page-link-next')
+            .attr('href', '?startKey=' + data.nextKey + '&prevKey=' + data.prevKey + '&pageNum=' + (data.pageNum+1) + '&filters=' + data.filterQueryString + '&pageSize=' + pageSize)
+          $('.page-item-next').removeClass('disabled')
+        }
+
+        const rangeFrom = ((data.pageNum - 1) * 25) + 1
+        const rangeTo = rangeFrom + (data.Items.length - 1)
+        $('.item-count').append(' (showing ' + rangeFrom + ' - ' + rangeTo + ')')
+
+        $('.table-container').removeClass('d-none')
+        $('.pagination-container').removeClass('d-none')
+      } else {
+        $('.no-results').removeClass('d-none')
+      }
+
+      $('#table-placeholder').addClass('d-none')
+
+      updateFilterAutocomplete(data.uniqueKeys)
+    }
+
+    window.addEventListener('load', () => {
+      const startOfNextQueryParam = location.search.substr(location.search.indexOf('filters=')).indexOf('&')
+      const queryStringFilters = location.search.substr(location.search.indexOf('filters='), startOfNextQueryParam === -1 ? undefined : startOfNextQueryParam).substr(8)
+
+      if (queryStringFilters.length > 0) {
+        let queryFilters = {}
+        try {
+          queryFilters = JSON.parse(decodeURIComponent(queryStringFilters))
+        } catch (ex) {}
+
+        const operationType = document.querySelector('select[name="operationType"]').value
+        for (const filterKey of Object.keys(queryFilters)) {
+          const filterParams = queryFilters[filterKey]
+          if (operationType === 'query') {
+            const querySelection = document.querySelector('select[name="queryableSelection"]')
+            const option = querySelection.selectedOptions[0]
+            const hashKey = option.getAttribute('data-key-hash')
+            const rangeKey = option.getAttribute('data-key-range')
+
+            if (filterKey === hashKey) {
+              addHashKeyFilter(filterKey, filterParams)
+            } else if (filterKey === rangeKey) {
+              addRangeKeyFilter(filterKey, filterParams)
+            } else {
+              addFilter(filterKey, filterParams)
+            }
+          } else {
+            addFilter(filterKey, filterParams)
+          }
+        }
+      }
+
+      fetch(document.location.pathname + '/items' + document.location.search)
+        .then(response => {
+          if (response.ok) {
+            return response.json()
+          }
+
+          return response.text().then(text => Promise.reject(new Error(text)))
+        })
+        .then(json => {
+          renderItems(json)
+        })
+        .catch(error => {
+          alert('Error loading data: ' + error)
+        })
+    })
+    </script>
+    <div class="table-container">
+      <div class="scroll-indicator"></div>
+      <div class="table-wrapper table-responsive">
+        <table class="table items-table table-hover">
+          <thead class="thead-light">
+            <tr id="actions-row">
+              <th scope="col">Actions</th>
+              <th scope="col">Id</th>
+              <th scope="col">Name</th>
+            </tr>
+          </thead>
+          <tbody id="items-container">
+            <% templates.forEach((template,index) => {%>
+              <tr>
+                <td><a class="nav-link active item-count" href="/usecase-templates/<%= template.id%>">View</a></td>
+                <td><%= template.id %></td>
+                <td><%= template.name %></td>
+              </tr>
+            <% });%>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

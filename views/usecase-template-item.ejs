@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang='en' data-theme="<%= theme %>">
+<head>
+  <%- include('partials/head') %>
+  <%- include('partials/ace-deps') %>
+  <%- include('partials/bootstrap-deps') %>
+  <%- include('partials/head-tail') %>
+</head>
+<body class='container-fluid d-flex flex-column'>
+  <div id="toast-container" style="position: fixed; top: 0; right: 0; z-index:100;" class="p-3"></div>
+  <script>window.store = <%-JSON.stringify(template) %>;</script>
+  <header>
+    <%
+      const breadcrumb = [
+        {
+          href: '/usecase-templates',
+          text: 'Usecase Templates',
+        },
+        {
+          href: `/usecase-templates/${template.id}`,
+          text: template.name
+        },
+      ]
+    %>
+    <%- include('partials/breadcrumb', { breadcrumb }) %>
+    <div class="d-flex flex-row">
+      <div class="p-2">
+        <h1>Template: <%= template.name %></h1>
+      </div>
+      <div class="p-2">
+        <button
+        class='btn btn-primary'
+        id='generateUseCaseButton'
+        onclick='generateUseCase()'
+        type='button'
+      >
+        Generate Usecase
+      </button>
+      </div>
+    </div>
+  </header>
+
+  <main class='flex-fill d-flex flex-column'>
+    <div class ="card p-2">
+      <div class="row">
+        <div class="col-6" style="height:70vh;">
+          <h2>Context</h2>
+          <div class="form-group">
+            <select class="form-control" id="selectContext">
+              <% template.contexts.forEach((context,index) => {%>
+                <option value="<%= context.name%>"><%= context.name %></option>  
+              <% });%>
+            </select>
+            <div style="width:100%; height:60vh; overflow:scroll; margin-top:10px;">
+              <article
+              id="documentWrapper"
+              class="flex-fill"
+              style='position: relative; margin-top: 16px; width: 100%; height: 100vh;'>
+                <div id='contextTextArea' style='
+                  position: absolute;
+                  top: 0;
+                  right: 0;
+                  bottom: 0;
+                  left: 0;'></div></article>
+            </div>
+          </div>
+        </div>
+        <div class="col-6" style="height:70vh;">
+          <div style="width:100%; height:70vh; overflow:scroll">
+            <h2>Tables</h2>
+            <div class="row">
+              <div class="col-12">
+                <table class="table items-table table-hover">
+                  <thead class="thead-light">
+                    <tr>
+                      <th scope="col">Name</th>
+                      <th scope="col">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% template.tables.forEach((table,index) => {%>
+                      <tr>
+                        <td><%= table.name %></td>  
+                        <td><a class="table-action-details" href="#" data-table-id="<%-table.name%>">View</a></td>
+                      </tr>
+                    <% });%>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <h2>Items</h2>
+            <div class="row">
+              <div class="col-12">
+                <table class="table items-table table-hover">
+                  <thead class="thead-light">
+                    <tr>
+                      <th scope="col">Table</th>
+                      <th scope="col">Item</th>
+                      <th scope="col">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% Object.entries(template.items).forEach(([tableKey, table]) => {%>
+                      <% table.forEach(item=> {%><tr>
+                        <td><%= tableKey %></td>  
+                        <td><%= item.name %></td>  
+                        <td><a class="item-action-details" href="#" data-table-id="<%-tableKey%>" data-item-id="<%-item.name%>">View</a></td>
+                      </tr><% });%>
+                    <% });%>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <div class="modal fade" id="outputModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalCenterTitle" aria-hidden="true">
+    <div class="modal-dialog" role="document" style="max-width:90vw;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="exampleModalLongTitle">Modal title</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body" style="max-height:80vh; overflow:auto;">
+          <pre class="preformatted output-body"></pre>
+        </div>
+        <div class="modal-footer"></div>
+      </div>
+    </div>
+  </div>
+  <div class="modal fade" id="detailsModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalCenterTitle" aria-hidden="true">
+    <div class="modal-dialog" role="document" style="max-width:80vw;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="exampleModalLongTitle">Modal title</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div id="detailsDocumentWrapper"
+          class="flex-fill"
+          style='position: relative; margin-top: 16px; width: 100%; height: 80vh;'>
+            <div id='detailsContextArea' style='
+              position: absolute;
+              top: 0;
+              right: 0;
+              bottom: 0;
+              left: 0;'></div></article>
+        </div>
+        <div class="modal-footer"></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    function renderContext(context){
+      const editor = ace.edit("contextTextArea")
+      editor.resize()
+      editor.getSession().setMode("ace/mode/json")
+      editor.setTheme("ace/theme/monokai")
+      editor.setFontSize(12)
+      editor.setValue(context);
+      editor.focus();
+    }
+
+    function selectContext(contextId) {
+      const context = window.store.contexts.find((context) => context.name === contextId) || {
+        "name": "default",
+        "context": "{}"
+      };
+      renderContext(context.context);
+    }
+
+    function showDetails(name, details){
+      const $modalEl = $('#detailsModal');
+      $modalEl.modal('toggle');
+
+      const $modalTitleEl = $modalEl.find('.modal-title');
+      $modalTitleEl.text(name);
+      const editor = ace.edit("detailsContextArea")
+      editor.resize()
+      editor.getSession().setMode("ace/mode/json")
+      editor.setTheme("ace/theme/monokai")
+      editor.setFontSize(12)
+      editor.setValue(details);
+      editor.setReadOnly(true);
+    }
+
+    function generateUseCase(){
+      const context = JSON.parse(ace.edit("contextTextArea").getValue());
+      const id = window.store.id;
+      $("#generateUseCaseButton").prop("disabled",true);
+      fetch(`/usecase-templates/populate`, {
+        method: 'post',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          id,
+          context
+        })
+      }).then((response) => {
+        response.json().then((json) => {
+          //console.log(json);
+          //const $preEl = $('pre.preformatted');
+          //$preEl.text(json.stdout);
+          notifyOutput(json);notifyOutput
+        });
+      }).catch((error) => {
+        console.error(error)
+      })
+      .finally(()=>{
+        $("#generateUseCaseButton").prop("disabled",false);
+      })
+    }
+
+    function createElement(html) {
+      const template = document.createElement('template')
+      template.innerHTML = html.trim()
+      return template.content.firstChild
+    }
+
+    const ERROR_ICON = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="text-danger bi bi-x-square-fill" viewBox="0 0 16 16">
+        <path d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2zm3.354 4.646L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 1 1 .708-.708z"/>
+      </svg>
+    `;
+    const SUCCESS_ICON = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="text-success bi bi-check-square-fill" viewBox="0 0 16 16">
+      <path d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2zm10.03 4.97a.75.75 0 0 1 .011 1.05l-3.992 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.75.75 0 0 1 1.08-.022z"/>
+    </svg>
+  `;
+    function notifyOutput(output) {
+      console.log(output);
+      const isSuccessfulResponse = output.error === null;
+      const title = isSuccessfulResponse? "Usecase generated successfully!" : "Error trying to generate usecase!";
+      const icon = isSuccessfulResponse? SUCCESS_ICON : ERROR_ICON;
+      const backgroundColor = isSuccessfulResponse? "bg-success" : "bg-danger";
+      const template = `
+        <div class="toast ${backgroundColor}" role="alert" data-autohide="false" aria-live="assertive" aria-atomic="true">
+          <div class="toast-header">
+            ${icon}
+            <strong class="mr-auto text-dark p-2">${title}</strong>
+            <button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Close">
+              <span aria-hidden="true">&times;</span>
+            </button>
+          </div>
+          <div class="toast-body bg-light">
+            <a href="#" class="alert-link output-details-action">Details</a>
+          </div>
+        </div>
+      `;
+      const content = [
+        output.cmd,
+        output.stdout,
+        output.stderr
+      ].filter((text)=>text).join("\n");
+      const toastElement = createElement(template);
+      $(toastElement).find('a.output-details-action').on("click",(event)=>{
+        event.preventDefault();
+        const $modalEl = $('#outputModal');
+        $modalEl.find('.modal-title').text(title);
+        $modalEl.find('.output-body').text(content);
+        $modalEl.modal('toggle');
+        return false;
+      })
+      document.getElementById("toast-container").appendChild(toastElement);
+      $(toastElement).toast("show");
+    }
+
+    document.addEventListener("DOMContentLoaded", ()=>{
+      const selectContextEl = document.getElementById('selectContext');
+      selectContext(selectContextEl.value);
+      selectContextEl.addEventListener("change", (event)=>{selectContext(event.target.value)});
+
+      const tableActionDetailsEls = document.querySelectorAll('a.table-action-details');
+      tableActionDetailsEls.forEach((tableActionDetailsEl) => {
+        tableActionDetailsEl.addEventListener("click", (event)=>{
+          event.preventDefault();
+          const tableId = event.target.dataset.tableId;
+          const tableDetails = window.store.tables.find((table) => table.name === tableId) || {
+            "name": "default",
+            "details": "{}"
+          };
+          showDetails(tableDetails.name, tableDetails.details);
+
+          return false;
+        });
+      });
+      
+      const itemActionDetailsEls = document.querySelectorAll('a.item-action-details');
+      itemActionDetailsEls.forEach((itemActionDetailsEl) => {
+        itemActionDetailsEl.addEventListener("click", (event)=>{
+          event.preventDefault();
+          const tableId = event.target.dataset.tableId;
+          const itemId = event.target.dataset.itemId;
+          const itemDetails = window.store.items[tableId].find((item) => item.name === itemId) || {
+            "name": "default",
+            "details": "{}"
+          };
+          showDetails(`${tableId} - ${itemId}`, itemDetails.details);
+
+          return false;
+        });
+      });
+    });
+  </script>
+</body>
+</html>
